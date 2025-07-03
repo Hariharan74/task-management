@@ -75,4 +75,3 @@ State: Context + AsyncStorage sync
 Navigation: Smooth stack transitions
 Forms: Formik + Yup validation
 
-result screenshort
