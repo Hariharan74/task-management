@@ -53,12 +53,12 @@ Edit/Delete: Swipeable cards with actions
 
 Project Structure
 src/
-├── components/  # Reusable UI (Button, TaskCard)
-├── contexts/    # Auth/Task state
-├── screens/     # Auth + Task screens
-├── data/        # users.json
-├── utils/       # authHelpers, storageService
-└── App.tsx      # Main entry with Navigation
+src/components/  # Reusable UI (Button, TaskCard)
+src/contexts/    # Auth/Task state
+src/screens/     # Auth + Task screens
+src/data/        # users.json
+src/utils/       # authHelpers, storageService
+src/App.tsx      # Main entry with Navigation
 
 
 
