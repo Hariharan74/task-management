@@ -1,0 +1,20 @@
+{
+  "name": "taskmanagementapp",
+  "displayName": "TaskManagementApp",
+  "expo": {
+    "name": "taskmanagementapp",
+    "slug": "taskmanagementapp",
+    "extra": {
+      "eas": {
+        "projectId": "98fa0192-63cb-4e5b-ba28-84f61e499147"
+      }
+    },
+    "android": {
+      "bundleIdentifier": "com.hariharan.taskmanager",
+      "buildNumber": "1.0.0"
+    },
+    "ios": {
+      "bundleIdentifier": "y"
+    }
+  }
+}

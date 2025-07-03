@@ -1,0 +1,9 @@
+[
+    {
+      "id": "default-user-1",
+      "email": "admin@example.com",
+      "password": "admin123", 
+      "passwordHash": "",
+      "createdAt": "2023-01-01T00:00:00.000Z"
+    }
+  ]
