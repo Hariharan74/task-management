@@ -1,16 +1,20 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
 import { Formik } from 'formik';
 import * as Yup from 'yup';
 import { Task } from '../types';
-import { Ionicons } from '@expo/vector-icons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { format, parse } from 'date-fns';
+import CustomDateTimePicker from './CustomDateTimePicker';
+import { useNavigation } from '@react-navigation/native';
+const { width, height } = Dimensions.get('window');
+
 
 interface TaskFormProps {
   initialValues?: Partial<Task>;
-  onSubmit: (values: { title: string; description: string; dueDate: string }) => void;
+  onSubmit: (values: {header:string, title: string; description: string; dueDate: string }) => void;
   onCancel?: () => void;
 }
-
 
 const validationSchema = Yup.object().shape({
   title: Yup.string().required('Title is required'),
@@ -22,62 +26,54 @@ const validationSchema = Yup.object().shape({
       'Date must be in YYYY-MM-DD HH:MM AM/PM format (e.g. 2025-07-05 02:43 PM)',
       (value) => {
         if (!value) return false;
-        
-        // Check basic format first
-        if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} [AP]M$/.test(value)) {
+        try {
+          const date = parse(value, 'yyyy-MM-dd hh:mm a', new Date());
+          return !isNaN(date.getTime());
+        } catch {
           return false;
         }
-        
-        // Parse the components
-        const [dateStr, timeStr, period] = value.split(' ');
-        const [hoursStr, minutesStr] = timeStr.split(':');
-        
-        // Convert to 24-hour format
-        let hours = parseInt(hoursStr, 10);
-        const minutes = parseInt(minutesStr, 10);
-        
-        if (period === 'PM' && hours < 12) hours += 12;
-        if (period === 'AM' && hours === 12) hours = 0;
-        
-        // Validate time components
-        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-          return false;
-        }
-        
-        // Validate date components
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        
-        return (
-          date.getFullYear() === year &&
-          date.getMonth() === month - 1 &&
-          date.getDate() === day
-        );
       }
     )
 });
+
 const TaskForm: React.FC<TaskFormProps> = ({ initialValues, onSubmit, onCancel }) => {
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const navigation = useNavigation();
+
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    initialValues?.dueDate
+      ? parse(initialValues.dueDate, 'yyyy-MM-dd hh:mm a', new Date())
+      : new Date()
+  );
+
+  const handleDateConfirm = (date: Date, setFieldValue: (field: string, value: string) => void) => {
+    setSelectedDate(date);
+    setFieldValue('dueDate', format(date, 'yyyy-MM-dd hh:mm a'));
+    setDatePickerOpen(false);
+  };
   return (
     <Formik
       initialValues={{
+        header: initialValues?.header,
+        mode: initialValues?.mode,
         title: initialValues?.title || '',
         description: initialValues?.description || '',
-        dueDate: initialValues?.dueDate || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        dueDate: initialValues?.dueDate || format(new Date(), 'yyyy-MM-dd hh:mm a'),
       }}
       validationSchema={validationSchema}
       onSubmit={onSubmit}
     >
-      {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
-        <View style={styles.container}>
+      {({ handleChange, handleBlur, handleSubmit, values, errors, touched, setFieldValue }) => (
+        <View style={values.mode != 'edit' ? styles.container : styles.editContainer}>
           <View style={styles.header}>
-            <Text style={styles.formTitle}>Add Task</Text>
+            <Text style={styles.formTitle}>{values.header}</Text>
             {onCancel && (
-              <TouchableOpacity onPress={onCancel} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#636e72" />
+              <TouchableOpacity onPress={onCancel} style={values.mode != 'edit' ? styles.closeButtonNone : styles.closeButton}>
+                <MaterialIcons name="close" size={24} color="#636e72" />
               </TouchableOpacity>
             )}
           </View>
-          
+
           <View style={styles.labelContainer}>
             <Text style={styles.label}>Title</Text>
             <Text style={styles.requiredStar}>*</Text>
@@ -113,29 +109,54 @@ const TaskForm: React.FC<TaskFormProps> = ({ initialValues, onSubmit, onCancel }
             <Text style={styles.label}>Due Date</Text>
             <Text style={styles.requiredStar}>*</Text>
           </View>
-          <TextInput
-            style={[
-              styles.input,
-              touched.dueDate && errors.dueDate ? styles.inputError : null
-            ]}
-            placeholder="YYYY-MM-DD HH:MM "
-            placeholderTextColor="#95a5a6"
-            onChangeText={handleChange('dueDate')}
-            onBlur={handleBlur('dueDate')}
-            value={values.dueDate}
-            keyboardType="numbers-and-punctuation"
-          />
+
+          <TouchableOpacity onPress={() => setDatePickerOpen(true)}>
+            <TextInput
+              style={[
+                styles.input,
+                touched.dueDate && errors.dueDate ? styles.inputError : null
+              ]}
+              placeholder="YYYY-MM-DD HH:MM AM/PM"
+              placeholderTextColor="#95a5a6"
+              value={values.dueDate}
+              editable={false}
+              pointerEvents="none"
+            />
+          </TouchableOpacity>
+
           {touched.dueDate && errors.dueDate && (
             <Text style={styles.error}>{errors.dueDate}</Text>
           )}
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
+
+          <CustomDateTimePicker
+            isVisible={datePickerOpen}
+            selectedDate={selectedDate}
+            onConfirm={(date) => handleDateConfirm(date, setFieldValue)}
+            onCancel={() => setDatePickerOpen(false)}
+            setFieldValue={setFieldValue}  // Pass the Formik setFieldValue
+          />
+
+          <View style={values.header == 'Add Task' ? styles.buttonContainer : styles.singlebuttonContainer}>
+            <TouchableOpacity
               style={styles.submitButton}
               onPress={handleSubmit}
             >
-              <Text style={styles.submitButtonText}>Save Task</Text>
+              <Text style={styles.submitButtonText}>Save</Text>
             </TouchableOpacity>
+
+            {values.header == 'Add Task' && <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }]
+                });
+              }}
+            >
+              <Text style={styles.cancelButton}>Cancel</Text>
+            </TouchableOpacity>
+            }
           </View>
         </View>
       )}
@@ -143,12 +164,24 @@ const TaskForm: React.FC<TaskFormProps> = ({ initialValues, onSubmit, onCancel }
   );
 };
 
+
 const styles = StyleSheet.create({
   container: {
+    height: height,
     padding: 24,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    shadowColor: '#000',
+    // borderRadius: 12,
+    // shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  editContainer: {
+    padding: 24,
+    backgroundColor: '#ffffff',
+    // borderRadius: 12,
+    // shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -168,6 +201,11 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 4,
+
+  },
+  closeButtonNone: {
+    // padding: 4,
+    display: 'none'
   },
   labelContainer: {
     flexDirection: 'row',
@@ -192,14 +230,15 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 48,
-    borderWidth: 1,
+    // borderWidth: 1,
     borderColor: '#dfe6e9',
     borderRadius: 8,
     paddingHorizontal: 16,
     marginBottom: 16,
     fontSize: 15,
-    color: '#2d3436',
-    backgroundColor: '#f8f9fa',
+    color: '#747e81ff',
+    backgroundColor: '#ebeef0ff',
+    // backgroundColor: '#f8f9fa',
   },
   inputError: {
     borderColor: '#e74c3c',
@@ -216,15 +255,28 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   buttonContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  singlebuttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 8,
   },
   submitButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    borderRadius: 40,
     backgroundColor: '#0984e3',
+  },
+  cancelButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    // borderRadius: 40,
+    // backgroundColor: '#0984e3',
   },
   submitButtonText: {
     color: '#ffffff',
@@ -233,3 +285,4 @@ const styles = StyleSheet.create({
 });
 
 export default TaskForm;
+

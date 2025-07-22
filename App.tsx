@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { View, ActivityIndicator, TouchableOpacity, Text, Image, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity, Text, Image, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, StackNavigationOptions } from '@react-navigation/stack';
 import LoginScreen from './src/screens/LoginScreen';
@@ -8,11 +8,14 @@ import HomeScreen from './src/screens/HomeScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import { useAuth } from './src/services/authService';
+import Taskscreen from './src/screens/TaskScreen';
+const { width,height } = Dimensions.get('window');
 
 type RootStackParamList = {
   Home: undefined;
   Login: undefined;
   Signup: undefined;
+  Task:undefined;
   TaskDetail: { taskId: string };
 };
 
@@ -20,35 +23,35 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const App = () => {
   const { user, loading, logout } = useAuth();
-   // Home screen options
-   const HeaderLogo = () => (
+  // Home screen options
+  const HeaderLogo = () => (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       <Image
-        source={require('./src/assets/company-logo.svg')} // Update with your actual logo path
-        style={{ width: 114, height: 36, marginRight: 10 }}
+        source={require('./src/assets/company-logo-png.png')} // Update with your actual logo path
+        style={{ width: 114, height: 39, marginRight: 10 }}
         resizeMode="contain"
       />
-     
+
     </View>
   );
   const homeScreenOptions: StackNavigationOptions = {
     // headerTitle: 'Task Management',
-
+    // headerBackTitle:'',
     headerTitle: () => <HeaderLogo />,
     headerRight: () => (
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={logout}
         style={{
           marginRight: 15,
           padding: 8,
           backgroundColor: '#ff4444',
           borderRadius: 5,
-          borderBottomWidth:0
-          
+          borderBottomWidth: 0
+
         }}
         testID="logout-button"
       >
-        
+
         <Text style={{ color: 'white', fontWeight: 'bold' }}>Logout</Text>
       </TouchableOpacity>
     ),
@@ -72,41 +75,58 @@ const App = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
+      <Stack.Navigator
         screenOptions={{
           // Common options for all screens
           headerBackTitleVisible: false,
-          headerBackgroundContainerStyle:{
-            borderBottomWidth:0
+
+          headerBackgroundContainerStyle: {
+            borderBottomWidth: 0
           },
           cardStyle: {
-            height:'100%',
-        
+            height: height,
+            // backgroundColor:'ffffff'
+             flex: 1,
+             backgroundColor: '#ffffff',
+
           },
-          
+
         }}
         initialRouteName={user ? 'Home' : 'Login'}
       >
         {/* Declare ALL screens upfront */}
-        <Stack.Screen 
-          name="Home" 
+        <Stack.Screen
+          name="Home"
           component={HomeScreen}
-          options={homeScreenOptions}
+          options={{
+            ...homeScreenOptions,
+            headerLeft: () => null,
+          }}
+
+        />
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={authScreenOptions}
+        />
+        <Stack.Screen
+          name="Signup"
+          component={SignupScreen}
+          options={authScreenOptions}
+        />
+        <Stack.Screen
+          name="Task"
+          component={Taskscreen}
+          options={{
+            ...homeScreenOptions,
+            headerLeft: () => null,
+          }}
           
+
         />
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen} 
-          options={authScreenOptions}
-        />
-        <Stack.Screen 
-          name="Signup" 
-          component={SignupScreen} 
-          options={authScreenOptions}
-        />
-        <Stack.Screen 
-          name="TaskDetail" 
-          component={TaskDetailScreen} 
+        <Stack.Screen
+          name="TaskDetail"
+          component={TaskDetailScreen}
           options={taskDetailOptions}
         />
       </Stack.Navigator>

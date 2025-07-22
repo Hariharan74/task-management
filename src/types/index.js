@@ -9,10 +9,13 @@ export interface User {
     TaskDetail: { taskId: string };
     Login: undefined;
     Signup: undefined;
+    Task:undefined;
   };
   
   export interface Task {
     id: string;
+    header:String;
+    mode:String;
     title: string;
     description?: string;
     dueDate: string;

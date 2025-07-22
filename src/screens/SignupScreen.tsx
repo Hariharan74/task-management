@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator, Dimensions } from 'react-native';
 import AuthForm from '../components/AuthForm';
 import { useAuth } from '../services/authService';
 import { storeObject, getObject, initializeUserStorage } from '../utils/storage';
 
-
+const { width,height } = Dimensions.get('window');
 const SignupScreen = ({ navigation }) => {
     const { signup } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +58,7 @@ const SignupScreen = ({ navigation }) => {
       }];
       
       // Save to AsyncStorage
+      console.log("signup -3")
       await storeObject('users.json', updatedUsers);
       
       // Navigate after successful signup
@@ -99,7 +100,7 @@ const SignupScreen = ({ navigation }) => {
         onSubmit={handleSignup}
         onNavigate={() => navigation.navigate('Login')}
         isLoading={isLoading}
-        logoSource={require('../assets/company-logo.svg')}
+        logoSource={require('../assets/company-logo-png.png')}
       />
       
       {/* Development-only debug button - now matching AuthForm button style */}
@@ -119,14 +120,16 @@ const SignupScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    // justifyContent: 'center',
+    // alignItems: 'center',
+    // padding: 20,
     backgroundColor: '#f5f5f5',
+    width:width,
+    height:height,
     
   },
   center: {
-    alignItems: 'center',
+    // alignItems: 'center',
   },
   debugButton: {
     backgroundColor: '#666',

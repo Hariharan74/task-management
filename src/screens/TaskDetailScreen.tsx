@@ -1,11 +1,11 @@
 import React from 'react';
-import { ScrollView, View, Text, StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Button, TouchableOpacity,ActivityIndicator, Dimensions } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTasks } from '../services/taskService';
 import { useAuth } from '../services/authService';
 import TaskForm from '../components/TaskForm';
 import ConfirmationDialog from '../components/ConfirmationDialog';
-
+const { width,height } = Dimensions.get('window');
 const TaskDetailScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
@@ -44,16 +44,18 @@ const TaskDetailScreen = () => {
 
   if (!task) {
     return (
-      <View style={styles.container}>
-        <Text>Task not found</Text>
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#0984e3" />
       </View>
     );
   }
   return (
-    <View style={styles.container}>
+    <View style={isEditing?styles.editContainer:styles.container}>
       {isEditing ? (
         <TaskForm
           initialValues={{
+            header:'Update Task',
+            mode:'add',
             title: task.title,
             description: task.description || '',
             dueDate: task.dueDate,
@@ -66,29 +68,32 @@ const TaskDetailScreen = () => {
           {/* Fixed Header Section */}
           <View style={styles.header}>
             <Text style={styles.title}>{task.title}</Text>
-
+          
             <View style={styles.dateRow}>
+              <View style={styles.dateContainer}>
+                <Text style={styles.dateLabel}>Created Date</Text>
+                <Text style={styles.dateValue}>
+                  {/* {task.createdAt} */}
+                  {new Date(task.createdAt).toLocaleDateString('en-US', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  }).replace(/(\d+)\/(\d+)\/(\d+),?/, '$3-$1-$2')} 
+                
+                  
+                </Text>
+              </View>
               <View style={styles.dateContainer}>
                 <Text style={styles.dateLabel}>Due Date</Text>
                 <Text style={styles.dateValue}>
-                  {new Date(task.dueDate).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  {task.dueDate}
                 </Text>
               </View>
 
-              <View style={styles.dateContainer}>
-                <Text style={styles.dateLabel}>Created</Text>
-                <Text style={styles.dateValue}>
-                  {new Date(task.createdAt).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </Text>
-              </View>
+              
             </View>
           </View>
 
@@ -138,8 +143,21 @@ const TaskDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // height:height,
     padding: 24,
     backgroundColor: '#f8f9fa',
+  },
+  editContainer: {
+    flex: 1,
+    height:height,
+    // padding: 24,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa', // Match your container background
   },
   header: {
     marginBottom: 16,

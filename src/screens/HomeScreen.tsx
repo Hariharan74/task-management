@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, SafeAreaView, Alert, Dimensions } from 'react-native';
+import { View, Image, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, SafeAreaView, Alert, Dimensions } from 'react-native';
 import { useTasks } from '../services/taskService';
 import { useAuth } from '../services/authService';
 import TaskForm from '../components/TaskForm';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+// import * from '../assets/'
+const { width, height } = Dimensions.get('window');
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -33,17 +35,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     return unsubscribe;
   }, [navigation, refreshTasks, user?.id]);
 
-  const handleAddTask = async (values: { title: string; description: string; dueDate: string }) => {
+  const handleAddTask = async (values: { header: string, title: string; description: string; dueDate: string }) => {
     try {
+      console.log('handleAddTask=====', values)
       await addTask(user?.id || '', values);
       setShowFormModal(false);
       refreshTasks(user?.id || '');
+      if (values.header == 'Add Task') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        });
+      }
     } catch (error) {
       console.error('Failed to add task:', error);
     }
   };
 
-  const handleUpdate = async (values: { title: string; description: string; dueDate: string }) => {
+  const handleUpdate = async (values: { header: string, title: string; description: string; dueDate: string }) => {
     await updateTask(selectedTask || '', user?.id || '', values);
     setIsEditing(false);
   };
@@ -76,7 +85,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }, 300);
   };
 
-  const triggerEdit = async (values: { title: string; description: string; dueDate: string }) => {
+  const triggerEdit = async (values: { header: string, title: string; description: string; dueDate: string }) => {
     if (selectedTask) {
       await updateTask(selectedTask, user?.id || '', values);
       setIsEditing(false);
@@ -110,14 +119,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView scrollEnabled={false} style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Fixed Header */}
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: '#1E3BA3' }]}>Tasks Management</Text>
       </View>
 
       {/* Scrollable Content */}
-      <View style={styles.listContainer} scrollEnabled={true}>
+      <View style={styles.listContainer} >
         <FlatList
           data={tasks}
           keyExtractor={(item) => item.id}
@@ -149,16 +158,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   </Text>
                 )}
                 <Text style={styles.taskDueDate}>
-                  {new Date(item.dueDate).toLocaleDateString('en-US', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                  }).replace(/(\d+)\/(\d+)\/(\d+),?/, '$2/$1/$3 ')}
+
+                  {item.dueDate}
                   {item.completed && (
-                    <Text style={styles.completedText}> ✓ Completed</Text>
+                    <Text style={styles.completedText}>Completed</Text>
                   )}
                 </Text>
               </TouchableOpacity>
@@ -192,7 +195,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             >
               {selectedOption === 'edit' && <Icon name="check" size={18} color="rgb(45, 52, 54)" style={styles.checkIcon} />}
               <Text style={styles.menuItemText}>Edit</Text>
-              
+
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity
@@ -210,27 +213,49 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       {/* Fixed Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
-          <Icon name="home" size={24} color="#888" />
-          <Text style={[styles.navText, { color: '#888' }]}>Home</Text>
+          {/* <Icon name="home" size={24} color="#888" /> */}
+          <Image
+            source={require('../assets/Home.png')}
+            style={{ width: 24, height: 24 }}
+
+          />
+          <Text style={[styles.navText, { color: '000000' }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
-          <Icon name="miscellaneous-services" size={24} color="#888" />
+          {/* <Icon name="miscellaneous-services" size={24} color="#888" /> */}
+          <Image
+            source={require('../assets/Service.png')}
+            style={{ width: 24, height: 24 }}
+
+          />
           <Text style={styles.navText}>Service</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
-          <Icon name="notifications" size={24} color="#888" />
+          {/* <Icon name="notifications" size={24} color="#888" /> */}
+          <Image
+            source={require('../assets/Activity.png')}
+            style={{ width: 24, height: 24 }}
+
+          />
           <Text style={styles.navText}>Activity</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => {
             setMode('new');
-            setShowFormModal(true);
+            // setShowFormModal(true);
+            navigation.navigate('Task')
+
           }}
         >
           <View style={styles.addTaskContainer}>
-            <Icon name="add" size={24} color="#888" />
-            <Text style={[styles.navText, { color: '#888' }]}>Add Task</Text>
+            {/* <Icon name="add" size={24} color="#888" /> */}
+            <Image
+              source={require('../assets/TaskAdd.png')}
+              style={{ width: 24, height: 24 }}
+
+            />
+            <Text style={[styles.navText, { color: '#000000' }]}>Add Task</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -248,10 +273,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               onSubmit={mode === 'edit' ? triggerEdit : handleAddTask}
               onCancel={() => setShowFormModal(false)}
               initialValues={mode === 'edit' ? {
+                header: 'Update Task',
+                mode: 'edit',
                 title: selectedTaskValue.title,
                 description: selectedTaskValue.description,
-                dueDate: selectedTaskValue.dueDate 
+                dueDate: selectedTaskValue.dueDate
               } : {
+                header: 'Add Task',
+                mode: 'add',
                 title: '',
                 description: '',
                 dueDate: `${new Date().toISOString().split('T')[0]} ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`
@@ -267,7 +296,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
     backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   loadingContainer: {
     flex: 1,
@@ -276,9 +308,9 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 20,
     paddingBottom: 10,
-    backgroundColor: '#ffffff',
+    // backgroundColor: '#ffffff',
     position: 'absolute',
     top: 0,
     left: 0,
@@ -291,8 +323,9 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     maxHeight: '85%',
+    width: width,
     flex: 1,
-    paddingTop: 50,
+    // paddingTop: 50,
   },
   listContent: {
     flexGrow: 1,

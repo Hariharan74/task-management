@@ -27,9 +27,10 @@ export const useTasks = (userId:string) => {
     const newTask: Task = {
       ...task,
       id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
+      createdAt : new Date(Date.now() - 5 * 60000).toISOString(),
       completed: false,
     };
+    console.log(newTask)
     const updatedTasks = [...tasks, newTask];
     await storeData(`tasks_${currentUserId}`, JSON.stringify(updatedTasks));
     setTasks(updatedTasks);
