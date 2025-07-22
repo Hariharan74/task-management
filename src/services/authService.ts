@@ -1,36 +1,74 @@
-
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { storeData, getData, removeData } from '../utils/storage';
 import { User } from '../types';
-import { v4 as uuidv4 } from 'uuid';
+import uuid from 'react-uuid';
 import bcrypt from 'react-native-bcrypt';
+import { getRandomBytes } from 'react-native-randombytes';
 import defaultUsers from '../data/Users.json';
+import isaac from 'isaac';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Helper function to promisify bcrypt calls
-const bcryptHash = (password: string, saltRounds: number): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    bcrypt.hash(password, saltRounds, (err, hash) => {
-      if (err) reject(err);
-      else resolve(hash);
-    });
-  });
-};
 
-const bcryptCompare = (password: string, hash: string): Promise<boolean> => {
-  return new Promise((resolve, reject) => {
-    bcrypt.compare(password, hash, (err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
+bcrypt.setRandomFallback((len:number) => {
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    buf[i] = Math.floor(isaac.random() * 256);
+  }
+  return buf;
+});
+// Performance monitoring utility
+const perfLogger = {
+  start: (label: string) => {
+    if (__DEV__) {
+      console.time(label);
+      return Date.now();
+    }
+    return 0;
+  },
+  end: (label: string, startTime?: number) => {
+    if (__DEV__) {
+      console.timeEnd(label);
+      if (startTime) {
+        console.log(`${label} took ${Date.now() - startTime}ms`);
+      }
+    }
+  }
 };
 
 // Constants
 const DB_KEY = 'user-database';
 const CURRENT_USER_KEY = 'current-user';
 const TOKEN_EXPIRY_HOURS = 24;
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 8; // Balanced security/performance for mobile
+
+// Cache for frequently accessed data
+const authCache = {
+  emailToId: new Map<string, string>(),
+  userTokens: new Map<string, { token: string; expiry: number }>()
+};
+
+// Fast storage operations with debouncing
+const debouncedUpdates = new Map<string, NodeJS.Timeout>();
+const fastStoreData = async (key: string, value: string) => {
+  try {
+    await AsyncStorage.setItem(key, value);
+  } catch (err) {
+    console.error('Storage error:', err);
+  }
+};
+
+const updateUserInDB = (user: User) => {
+  if (debouncedUpdates.has(user.id)) {
+    clearTimeout(debouncedUpdates.get(user.id));
+  }
+
+  debouncedUpdates.set(user.id, setTimeout(async () => {
+    const currentDB = await getData(DB_KEY);
+    const updatedDB = { ...JSON.parse(currentDB || '{}'), [user.id]: user };
+    await fastStoreData(DB_KEY, JSON.stringify(updatedDB));
+    debouncedUpdates.delete(user.id);
+  }, 500));
+};
 
 export const useAuth = () => {
   const [authState, setAuthState] = useState<{
@@ -44,14 +82,65 @@ export const useAuth = () => {
   });
 
   const [usersDB, setUsersDB] = useState<Record<string, User>>({});
+  const initialized = useRef(false);
 
-  // Generate JWT token
+  // Helper function to promisify bcrypt calls
+  const bcryptHash = useCallback((password: string, saltRounds: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      console.log(typeof password,typeof saltRounds); 
+      console.log("bcryptHash======",password,8)
+      bcrypt.genSalt(saltRounds, function(err, salt) {
+        if (err) {
+          console.error("Salt error:", err);
+          return;
+        }
+        console.log(salt)
+        bcrypt.hash(password, salt, (err:any, hash:string) => {
+          if (err){
+            
+            reject(err);
+
+          } 
+          
+          else {
+            console.log(hash)
+            resolve(hash);
+          }
+        });
+      });
+    });
+  },[]);
+
+  const bcryptCompare = (password: string, hash: string): Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+      bcrypt.compare(password, hash, (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      });
+    });
+  };
+
+  // Generate JWT token with caching
   const generateToken = useCallback((userId: string): string => {
-    const payload = { 
+    const cacheKey = `${userId}-${Math.floor(Date.now() / (TOKEN_EXPIRY_HOURS * 3600000))}`;
+    const cached = authCache.userTokens.get(cacheKey);
+
+    if (cached && cached.expiry > Date.now() / 1000) {
+      return cached.token;
+    }
+
+    const payload = {
       userId,
       exp: Math.floor(Date.now() / 1000) + (TOKEN_EXPIRY_HOURS * 3600)
     };
-    return `mock.${btoa(JSON.stringify(payload))}.token`;
+    const token = `mock.${btoa(JSON.stringify(payload))}.token`;
+
+    authCache.userTokens.set(cacheKey, {
+      token,
+      expiry: payload.exp
+    });
+
+    return token;
   }, []);
 
   // Validate token
@@ -70,55 +159,72 @@ export const useAuth = () => {
     if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
   }, []);
 
+  // Optimized DB refresh with caching
   const refreshUsersDB = useCallback(async (): Promise<Record<string, User>> => {
+    const start = perfLogger.start('refreshUsersDB');
     const storedDB = await getData(DB_KEY);
     const parsedDB = storedDB ? JSON.parse(storedDB) : {};
+
+    // Update email cache
+    Object.entries(parsedDB).forEach(([key, user]) => {
+      authCache.emailToId.set(user.email.toLowerCase(), key);
+    });
+
     setUsersDB(parsedDB);
+    perfLogger.end('refreshUsersDB', start);
     return parsedDB;
   }, []);
 
-  // Initialize database
+  const getUuid = () => {
+    const unique_id = uuid()
+    return unique_id
+  }
+
+  // Initialize database with performance optimizations
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
     const initializeAuth = async () => {
+      const initStart = Date.now();
       try {
         setAuthState(prev => ({ ...prev, loading: true }));
-        
-        // 1. Load existing DB
-        const storedDB = await getData(DB_KEY);
-        const initialDB = storedDB ? JSON.parse(storedDB) : {};
-        
-        // 2. Prepare default users with hashed passwords
-        const preparedDefaults = await Promise.all(
-          Object.entries(defaultUsers).map(async ([key, user]) => {
-            const passwordHash = user.passwordHash || await bcryptHash(user.password, SALT_ROUNDS);
-            return {
-              [key]: {
-                ...user,
-                passwordHash,
-                token: user.token || generateToken(user.id)
-              }
-            };
-          })
-        ).then(results => Object.assign({}, ...results));
-        
-        // 3. Merge with priority to existing users
-        const mergedDB = { ...preparedDefaults, ...initialDB };
-        
-        setUsersDB(mergedDB);
-        await storeData(DB_KEY, JSON.stringify(mergedDB));
-        
-        // 4. Load current session
-        const storedUser = await getData(CURRENT_USER_KEY);
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          if (parsedUser?.id && validateToken(parsedUser.token)) {
-            setAuthState({ user: parsedUser, loading: false, error: null });
+
+        // 1. Check current session in parallel with DB load
+        const [session, db] = await Promise.all([
+          getData(CURRENT_USER_KEY),
+          getData(DB_KEY)
+        ]);
+
+        // 2. Fast path for logged-in users
+        if (session) {
+          const user = JSON.parse(session);
+          if (validateToken(user.token)) {
+            setAuthState({ user, loading: false, error: null });
+            perfLogger.end('initializeAuth', initStart);
             return;
           }
-          await removeData(CURRENT_USER_KEY);
         }
-        
+
+        // 3. Initialize with pre-hashed defaults if empty
+        if (!db) {
+          perfLogger.start('prepareDefaults');
+          const defaultDB = defaultUsers.reduce((acc, user) => {
+            acc[user.id] = user;
+            return acc;
+          }, {});
+          perfLogger.end('prepareDefaults');
+
+          await Promise.all([
+            fastStoreData(DB_KEY, JSON.stringify(defaultDB)),
+            setUsersDB(defaultDB)
+          ]);
+        } else {
+          setUsersDB(JSON.parse(db));
+        }
+
         setAuthState({ user: null, loading: false, error: null });
+        perfLogger.end('initializeAuth', initStart);
       } catch (err) {
         console.error('Auth init error:', err);
         setAuthState({
@@ -128,108 +234,137 @@ export const useAuth = () => {
         });
       }
     };
-  
+
+    // Warm up bcrypt during initialization
+    // bcryptHash('warmup').catch(() => {});
     initializeAuth();
   }, []);
 
-  // Login function
-  const login = async (email: string, password: string): Promise<{success: boolean, user?: User, error?: string}> => {
+  // Optimized login function
+  const login = async (email: string, password: string): Promise<{ success: boolean, user?: User, error?: string }> => {
+    const loginStart = Date.now();
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
-      
+
+      // 1. Fast validation
+      perfLogger.start('validateCredentials');
       validateCredentials(email, password);
-      const newUpdateDB = await refreshUsersDB();
-      const userKey = Object.keys(newUpdateDB).find(key => 
-        newUpdateDB[key].email.toLowerCase() === email.toLowerCase()
+      perfLogger.end('validateCredentials');
+
+      // 2. Memory-first lookup
+      const emailLower = email.toLowerCase();
+      let user = Object.values(usersDB).find(u =>
+        u.email.toLowerCase() === emailLower
       );
-      
-      if (!userKey) {
-        throw new Error('No account found with this email address');
+
+      // 3. Fallback to storage if not found
+      if (!user) {
+        perfLogger.start('refreshUsersDB');
+        const db = await refreshUsersDB();
+        user = Object.values(db).find(u =>
+          u.email.toLowerCase() === emailLower
+        );
+        perfLogger.end('refreshUsersDB');
+        if (!user) throw new Error('No account found');
       }
-      
-      const user = newUpdateDB[userKey];
-      let valid = false;
-  
-      // Special handling for default users
-      if (userKey.startsWith('default-')) {
-        // First try direct comparison (for plain text passwords)
-        if (user.password && password === user.password) {
-          valid = true;
-          // If matched plain text, generate hash for future use
-          if (!user.passwordHash) {
-            const passwordHash = await bcryptHash(password, SALT_ROUNDS);
-            const updatedUser = { ...user, passwordHash };
-            const updatedDB = { ...newUpdateDB, [userKey]: updatedUser };
-            setUsersDB(updatedDB);
-            await storeData(DB_KEY, JSON.stringify(updatedDB));
-          }
-        } else {
-          // Fallback to bcrypt compare if plain text didn't match
-          valid = await bcryptCompare(password, user.passwordHash);
-        }
-      } else {
-        // Regular users must use bcrypt
-        valid = await bcryptCompare(password, user.passwordHash);
-      }
-      
-      if (!valid) {
-        throw new Error('Incorrect password');
-      }
-      
+
+      // 4. Password verification
+      perfLogger.start('passwordVerification');
+      console.log(user.passwordHash)
+      const valid = user.passwordHash
+        ? await bcryptCompare(password, user.passwordHash)
+        : password === user.password; // Legacy fallback
+      perfLogger.end('passwordVerification');
+
+      if (!valid) throw new Error('Incorrect password');
+
+      // 5. Generate token and update
+      perfLogger.start('tokenGeneration');
       const token = generateToken(user.id);
       const updatedUser = { ...user, token };
-      
-      const updatedDB = { ...newUpdateDB, [userKey]: updatedUser };
-      setUsersDB(updatedDB);
-      await storeData(DB_KEY, JSON.stringify(updatedDB));
-      
+
+      // 6. Async updates (don't wait)
+      updateUserInDB(updatedUser);
       const { passwordHash, ...safeUser } = updatedUser;
-      await storeData(CURRENT_USER_KEY, JSON.stringify(safeUser));
+      await fastStoreData(CURRENT_USER_KEY, JSON.stringify(safeUser));
+      perfLogger.end('tokenGeneration');
+
       setAuthState({ user: safeUser, loading: false, error: null });
-      
+
+      if (__DEV__) {
+        console.log(`Login completed in ${Date.now() - loginStart}ms`);
+      }
+
       return { success: true, user: safeUser };
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Login failed';
       setAuthState(prev => ({ ...prev, error, loading: false }));
+
+      if (__DEV__) {
+        console.log(`Login failed after ${Date.now() - loginStart}ms`, error);
+      }
+
       return { success: false, error };
     }
   };
 
-  // Signup function
-  const signup = async (email: string, password: string): Promise<{success: boolean, user?: User, error?: string}> => {
+  // Signup function with performance tracking
+  const signup = async (email: string, password: string): Promise<{ success: boolean, user?: User, error?: string }> => {
+    const signupStart = Date.now();
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
+
+      perfLogger.start('validateCredentials');
       validateCredentials(email, password);
+      perfLogger.end('validateCredentials');
 
       const emailLower = email.toLowerCase();
+
+      perfLogger.start('emailCheck');
       const currentDB = await refreshUsersDB();
       if (Object.values(currentDB).some(u => u.email.toLowerCase() === emailLower)) {
         throw new Error('Email address already in use');
       }
+      perfLogger.end('emailCheck');
 
-      const passwordHash = await bcryptHash(password, SALT_ROUNDS);
+      perfLogger.start('signuppasswordHash');
+      const passwordHash = await bcryptHash(password, SALT_ROUNDS)
+      perfLogger.end('signuppasswordHash');
+
       const newUser: User = {
-        id: `user-${uuidv4()}`,
+        id: `user-${getUuid()}`,
         email: emailLower,
         passwordHash,
-        token: generateToken(uuidv4()),
+        token: generateToken(getUuid()),
         createdAt: new Date().toISOString()
       };
 
       // Update database
+      // perfLogger.start('dbUpdate');
       const updatedDB = { ...currentDB, [newUser.id]: newUser };
       setUsersDB(updatedDB);
-      await storeData(DB_KEY, JSON.stringify(updatedDB));
-      
+      await fastStoreData(DB_KEY, JSON.stringify(updatedDB));
+      // perfLogger.end('dbUpdate');
+
       // Store current user (without sensitive data)
       const { passwordHash: _, ...safeUser } = newUser;
-      await storeData(CURRENT_USER_KEY, JSON.stringify(safeUser));
+      await fastStoreData(CURRENT_USER_KEY, JSON.stringify(safeUser));
+
       setAuthState({ user: safeUser, loading: false, error: null });
-      
+
+      // if (__DEV__) {
+      //   console.log(`Signup completed in ${Date.now() - signupStart}ms`);
+      // }
+
       return { success: true, user: safeUser };
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Registration failed';
       setAuthState(prev => ({ ...prev, error, loading: false }));
+
+      // if (__DEV__) {
+      //   console.log(`Signup failed after ${Date.now() - signupStart}ms`, error);
+      // }
+
       return { success: false, error };
     }
   };
@@ -262,7 +397,7 @@ export const useAuth = () => {
     return Object.values(usersDB).map(({ passwordHash, ...user }) => user);
   }, [usersDB]);
 
-  return { 
+  return {
     ...authState,
     login,
     signup,

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AuthForm from '../components/AuthForm';
 import { useAuth } from '../services/authService';
+const { width,height } = Dimensions.get('window');
 
 type RootStackParamList = {
   Login: undefined;
@@ -28,6 +29,7 @@ const LoginScreen = () => {
           index: 0,
           routes: [{ name: 'Home' }]
         });
+        
       } else {
         // Handle specific error cases
         if (result.error?.includes('Incorrect password')) {
@@ -51,7 +53,7 @@ const LoginScreen = () => {
         onNavigate={() => navigation.navigate('Signup')}
         isLoading={loading}
         authError={authError} // Pass auth error to form
-        logoSource={require('../assets/company-logo.svg')}
+        logoSource={require('../assets/company-logo-png.png')}
       />
     </View>
   );
@@ -59,11 +61,14 @@ const LoginScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    height:height,
+    width:width,
+    backgroundColor: '#ffffff',
+    // flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f5f5f5',
+    // padding: 20,
+    // backgroundColor: '#f5f5f5',
     
   },
 });

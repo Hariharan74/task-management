@@ -83,7 +83,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const storeData = async (key: string, value: string): Promise<void> => {
   try {
     await AsyncStorage.setItem(key, value);
-    console.log(`[Storage] Saved: ${key}`);
+    console.log(`[Storage] Saved: ${key}`,value);
   } catch (error) {
     console.error(`[Storage] Error saving ${key}:`, error);
     throw error;

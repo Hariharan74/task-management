@@ -1,15 +1,16 @@
 import React from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, Text, View } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity, Text, View, Dimensions } from 'react-native';
 import { Task } from '../types';
 
 interface TaskListProps {
   tasks: Task[];
   onTaskPress: (taskId: string) => void;
 }
+const { width,height } = Dimensions.get('window');
 
 const TaskList: React.FC<TaskListProps> = ({ tasks, onTaskPress }) => {
   return (
-    <FlatList
+    <FlatList style={styles.container}
       data={tasks}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
@@ -35,8 +36,14 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onTaskPress }) => {
 };
 
 const styles = StyleSheet.create({
+  container:{
+    flex:1,
+    height:height,
+    width:width
+  },
   taskItem: {
     padding: 15,
+    // width:width,
     // borderBottomWidth: 1,
     // borderBottomColor: '#eee',
     backgroundColor: 'white',
